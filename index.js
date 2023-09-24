@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const path = require('path');
 const Product = require("./schema/products")
 const methodOverride = require("method-override")
+const AppError = require('./AppError');
 
 
 const app = express();
@@ -21,51 +22,88 @@ app.set('view engine','ejs');
 app.use(express.urlencoded({extended:true}));
 app.use(methodOverride('_method'))
 
-app.get('/products',async (req,res)=>{
+app.get('/',(req,res)=>{
+    res.send("Home");
+});
+
+app.get('/error',(req,res)=>{
+    mad.bro();
+});
+
+app.get('/products',async (req,res,next)=>{
     
-    const products = await Product.find();
-    res.render("products/index", {products});
+    try{
+        const products = await Product.find();
+        res.render("products/index", {products});
+    }catch(err){
+        next(new AppError('Products not found',404))
+    }
 });
 
 app.get('/products/new', (req,res)=>{
+    // throw new AppError("Not allowed",500); //for non async functions
     res.render("products/new")
 });
 
-app.post('/products' ,(req,res)=>{
-    console.log(req.body)
-    Product.create(req.body);
+app.post('/products' ,async (req,res,next)=>{
+    try{
+           await Product.create(req.body);
+    }catch(err){
+        next(new AppError('Cannot Create',504))
+    }
     res.redirect('/products')
 })
-app.delete('/products/:id', async(req,res)=>{
+app.delete('/products/:id', async(req,res,next)=>{
     const {id} = req.params;
-
-    await Product.findByIdAndDelete(id);
+    try{
+        await Product.findByIdAndDelete(id);
+    }catch(err){
+        next(new AppError('Products not found',404))
+    }
     res.redirect('/products')
 
-})
-app.get('/products/:id',async (req,res)=>{
+});
+
+app.get('/products/:id',async (req,res,next)=>{
 
     const {id} = req.params;
+    let product;
 
-    const product = await Product.findById(id);
-    console.log(product)
+    try{
+         product = await Product.findById(id);
+    }
+    catch(err){
+        next(new AppError('Product not found',404));
+    }
     res.render("products/detail", {product});
 });
-app.put('/products/:id',async (req,res)=>{
+
+app.put('/products/:id',async (req,res,next)=>{
    
     const {id} = req.params;
-    const product = await Product.findByIdAndUpdate(id,req.body,{runValidators : true , new: true});
-    res.redirect(`/products/${id}`);
+    try{
+        const product = await Product.findByIdAndUpdate(id,req.body,{runValidators : true , new: true});
+        res.redirect(`/products/${id}`);
+    }catch(err){
+        next(new AppError('Products not found',404))
+    }
 
 })
-app.get('/products/:id/edit', async (req,res)=>{
+app.get('/products/:id/edit', async (req,res,next)=>{
 
     const {id} = req.params;
+    try{
+        const product = await Product.findById(id);
+        res.render("products/edit", {product})
+    }catch(err){
+        next(new AppError('Products not found',404))
+    }
+});
 
-    const product = await Product.findById(id);
-
-    res.render("products/edit", {product})
-})
+app.use((err,req,res,next)=>{
+    const {status=500,message = 'something went wrong'} = err;
+    res.status(status).send(message);
+});
 
 
 app.listen(3000,()=>{
